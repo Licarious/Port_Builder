@@ -4,8 +4,9 @@ import copy
 
 
 #flag for selcting which type of water the new ports should go on
-waterTypeFlag = "river" #river or sea
+waterTypeFlag = "sea" #river or sea
 portScale = 0.75
+lookThroughNPixelsToFindGoodPortLocation = 200 #higher number will spiral out from the spiriling out of the city location to find a good and valid port location
 
 
 
@@ -28,6 +29,8 @@ class Port:
     xyCityTupple = (0,0)
     xyPortTupple = (0,0)
     facingDirection = ""
+    fallbackXyPortTupple = (0,0)
+    fallbackFacingDirection = ""
     
 riverList = []
 tmpRiverList = []
@@ -315,116 +318,154 @@ getCityPosition()
 c=0
 PortCSVOut = open("Output/ports_output.csv", 'w')
 PortLocOut = open("Output/port_locators_output.txt", 'w')
+skipList = open("Output/skipped List.txt", 'w')
 tmpRiverCordTuppleList = []
 refreshTmpList = True
 print("Generating port position and rotation (This might take a while)")
+skipList.write("The fallowing provIDs were not fond in a timly maner and skiped.  These will need to be added manualy.")
 for port in portList:
-    if refreshTmpList:
-        tmpRiverCordTuppleList = copy.deepcopy(riverCordTuppleList)
-        refreshTmpList = False
-    foundAdj = False
-    for prov in provList:
-        if prov.id == port.landID:
-            port.landRGB = prov.getRGB()
-            break
+    useFallback = False
+    skip = False
+    if port.xyCityTupple == (0,0):
+        print("City not found skiping prov")
+        c+=1
+    else:
+        if refreshTmpList:
+            tmpRiverCordTuppleList = copy.deepcopy(riverCordTuppleList)
+            refreshTmpList = False
+        foundAdj = False
+        for prov in provList:
+            if prov.id == port.landID:
+                port.landRGB = prov.getRGB()
+                break
+        sIteration = 0
+        c+=1
+        print("\t%i / %i \t-\tprov %i"%(c,len(portList),port.landID))
+        while not foundAdj:
+            port.xyPortTupple = min(tmpRiverCordTuppleList, key=lambda point: (point[0] - port.xyCityTupple[0])**2 + (point[1] - port.xyCityTupple[1])**2)
 
-    c+=1
-    print("\t%i / %i"%(c,len(portList)))
-    while not foundAdj:
-        port.xyPortTupple = min(tmpRiverCordTuppleList, key=lambda point: (point[0] - port.xyCityTupple[0])**2 + (point[1] - port.xyCityTupple[1])**2)
+            #South  -   rotation={ -0.000000 -0.000000 -0.000000 1.000000 }
+            #West   -   rotation={ -0.000000 -0.639206 -0.000000 0.769035 }
+            #North  -   rotation={ -0.000000 -1.000000 -0.000000 -0.000000 }
+            #East   -   rotation={ -0.000000 0.729796 -0.000000 0.683664 }
+            #SW     -   rotation={ -0.000000 -0.287422 -0.000000 0.957804 }
+            #NW     -   rotation={ -0.000000 -0.874790 -0.000000 0.484502 }
+            #NE     -   rotation={ -0.000000 0.910970 -0.000000 0.412472 }
+            #SE     -   rotation={ -0.000000 0.427556 -0.000000 0.903988 }
 
-        #South  -   rotation={ -0.000000 -0.000000 -0.000000 1.000000 }
-        #West   -   rotation={ -0.000000 -0.639206 -0.000000 0.769035 }
-        #North  -   rotation={ -0.000000 -1.000000 -0.000000 -0.000000 }
-        #East   -   rotation={ -0.000000 0.729796 -0.000000 0.683664 }
-        #SW     -   rotation={ -0.000000 -0.287422 -0.000000 0.957804 }
-        #NW     -   rotation={ -0.000000 -0.874790 -0.000000 0.484502 }
-        #NE     -   rotation={ -0.000000 0.910970 -0.000000 0.412472 }
-        #SE     -   rotation={ -0.000000 0.427556 -0.000000 0.903988 }
+            #make sure that the closest water to the city is actualy adjacent to the prov
+            if port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1])):
+                if port.fallbackXyPortTupple == (0,0):
+                    port.fallbackXyPortTupple = (port.xyPortTupple[0]+1,port.xyPortTupple[1])
+                    port.fallbackFacingDirection = "West"
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                if port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]+1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]-1)):
+                    port.facingDirection = "West"
+                    foundAdj = True
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                    port.xyPortTupple = (port.xyPortTupple[0]+1,port.xyPortTupple[1])
+                    break
+                elif port.landRGB == provMap.getpixel((port.xyPortTupple[0]+2,port.xyPortTupple[1]+1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]-1)):
+                    port.facingDirection = "SW"
+                    foundAdj = True
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                    port.xyPortTupple = (port.xyPortTupple[0]+1,port.xyPortTupple[1])
+                    break
+                elif port.landRGB == provMap.getpixel((port.xyPortTupple[0]+2,port.xyPortTupple[1]-1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]+1)):
+                    port.facingDirection = "NW"
+                    foundAdj = True
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                    port.xyPortTupple = (port.xyPortTupple[0]+1,port.xyPortTupple[1])
+                    break
+            if port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]+1)):
+                if port.fallbackXyPortTupple == (0,0):
+                    port.fallbackXyPortTupple = (port.xyPortTupple[0],port.xyPortTupple[1]+1)
+                    port.fallbackFacingDirection = "North"
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                if port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]+2)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1])):
+                    port.facingDirection = "North"
+                    foundAdj = True
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                    port.xyPortTupple = (port.xyPortTupple[0],port.xyPortTupple[1]+1)
+                    break
+                elif port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]+2)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1])):
+                    port.facingDirection = "NE"
+                    foundAdj = True
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                    port.xyPortTupple = (port.xyPortTupple[0],port.xyPortTupple[1]+1)
+                    break
+            if port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1])):
+                if port.fallbackXyPortTupple == (0,0):
+                    port.fallbackXyPortTupple = (port.xyPortTupple[0]-1,port.xyPortTupple[1])
+                    port.fallbackFacingDirection = "East"
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                if port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1]-1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1]+1)):
+                    port.facingDirection = "East"
+                    foundAdj = True
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                    port.xyPortTupple = (port.xyPortTupple[0]-1,port.xyPortTupple[1])
+                    break
+                elif port.landRGB == provMap.getpixel((port.xyPortTupple[0]-2,port.xyPortTupple[1]+1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]-1)):
+                    port.facingDirection = "SE"
+                    foundAdj = True
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                    port.xyPortTupple = (port.xyPortTupple[0]-1,port.xyPortTupple[1])
+                    break
 
-        #make sure that the closest water to the city is actualy adjacent to the prov
-        if port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1])):
-            if port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]+1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]-1)):
-                port.facingDirection = "West"
-                foundAdj = True
-                port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
-                port.xyPortTupple = (port.xyPortTupple[0]+1,port.xyPortTupple[1])
-                break
-            elif port.landRGB == provMap.getpixel((port.xyPortTupple[0]+2,port.xyPortTupple[1]+1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]-1)):
-                port.facingDirection = "SW"
-                foundAdj = True
-                port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
-                port.xyPortTupple = (port.xyPortTupple[0]+1,port.xyPortTupple[1])
-                break
-            elif port.landRGB == provMap.getpixel((port.xyPortTupple[0]+2,port.xyPortTupple[1]-1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]+1)):
-                port.facingDirection = "NW"
-                foundAdj = True
-                port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
-                port.xyPortTupple = (port.xyPortTupple[0]+1,port.xyPortTupple[1])
-                break
-        if port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]+1)):
-            if port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]+2)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1])):
-                port.facingDirection = "North"
-                foundAdj = True
-                port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
-                port.xyPortTupple = (port.xyPortTupple[0],port.xyPortTupple[1]+1)
-                break
-            elif port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]+2)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1])):
-                port.facingDirection = "NE"
-                foundAdj = True
-                port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
-                port.xyPortTupple = (port.xyPortTupple[0],port.xyPortTupple[1]+1)
-                break
-        if port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1])):
-            if port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1]-1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1]+1)):
-                port.facingDirection = "East"
-                foundAdj = True
-                port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
-                port.xyPortTupple = (port.xyPortTupple[0]-1,port.xyPortTupple[1])
-                break
-            elif port.landRGB == provMap.getpixel((port.xyPortTupple[0]-2,port.xyPortTupple[1]+1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]-1)):
-                port.facingDirection = "SE"
-                foundAdj = True
-                port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
-                port.xyPortTupple = (port.xyPortTupple[0]-1,port.xyPortTupple[1])
-                break
+            if port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]-1)):
+                if port.fallbackXyPortTupple == (0,0):
+                    port.fallbackXyPortTupple = (port.xyPortTupple[0],port.xyPortTupple[1]-1)
+                    port.fallbackFacingDirection = "South"
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                if port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1]-1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]-1)):
+                    port.facingDirection = "South"
+                    foundAdj = True
+                    port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
+                    port.xyPortTupple = (port.xyPortTupple[0],port.xyPortTupple[1]-1)
+                    break
+            #print("%i not adj to (%i, %i)"%(port.landID,port.xyPortTupple[0],port.xyPortTupple[1]))
+            tmpRiverCordTuppleList.remove(port.xyPortTupple)
+            refreshTmpList = True
 
-        if port.landRGB == provMap.getpixel((port.xyPortTupple[0],port.xyPortTupple[1]-1)):
-            if port.landRGB == provMap.getpixel((port.xyPortTupple[0]-1,port.xyPortTupple[1]-1)) and port.landRGB == provMap.getpixel((port.xyPortTupple[0]+1,port.xyPortTupple[1]-1)):
-                port.facingDirection = "South"
-                foundAdj = True
-                port.waterRGB = provMap.getpixel(port.xyPortTupple)[0:3]
-                port.xyPortTupple = (port.xyPortTupple[0],port.xyPortTupple[1]-1)
+            sIteration += 1
+
+            if sIteration > lookThroughNPixelsToFindGoodPortLocation:
+                if not port.fallbackXyPortTupple == (0,0):
+                    print("using fallback for prov %i"%port.landID)
+                    useFallback = True
+                else:
+                    print("skipping prov %i"%port.landID)
+                    skip = True
                 break
-        #print("%i not adj to (%i, %i)"%(port.landID,port.xyPortTupple[0],port.xyPortTupple[1]))
-        tmpRiverCordTuppleList.remove(port.xyPortTupple)
-        refreshTmpList = True
+        if skip:
+            skipList.write("\n%i"%port.landID)
+        else:
+            port.waterID = riverProvList[provColorList.index(port.waterRGB)].id
 
-    port.waterID = riverProvList[provColorList.index(port.waterRGB)].id
+            PortLocOut.write("\t\t{")
+            PortLocOut.write("\n\t\t\tid=%i"%port.landID)
+            PortLocOut.write("\n\t\t\tposition={ %i 0 %i }"%(port.xyPortTupple[0],int(provMap.size[1])-int(port.xyPortTupple[1])))
+            if port.facingDirection == "South" or (port.fallbackFacingDirection == "South" and useFallback):
+                PortLocOut.write("\n\t\t\trotation={ -0.000000 -0.000000 -0.000000 1.000000 }")
+            elif port.facingDirection == "West" or (port.fallbackFacingDirection == "West" and useFallback):
+                PortLocOut.write("\n\t\t\trotation={ -0.000000 -0.672702 -0.000000 0.739914 }")
+            elif port.facingDirection == "North" or (port.fallbackFacingDirection == "North" and useFallback):
+                PortLocOut.write("\n\t\t\trotation={ -0.000000 -1.000000 -0.000000 -0.000000 }")
+            elif port.facingDirection == "East" or (port.fallbackFacingDirection == "East" and useFallback):
+                PortLocOut.write("\n\t\t\trotation={ -0.000000 0.736881 -0.000000 0.676022 }")
+            elif port.facingDirection == "SW":
+                PortLocOut.write("\n\t\t\trotation={ -0.000000 -0.874790 -0.000000 0.484502 }")
+            elif port.facingDirection == "NW":
+                PortLocOut.write("\n\t\t\trotation={ -0.000000 0.736881 -0.000000 0.676022 }")
+            elif port.facingDirection == "NE":
+                PortLocOut.write("\n\t\t\trotation={ -0.000000 0.910970 -0.000000 0.412472 }")
+            elif port.facingDirection == "SE":
+                PortLocOut.write("\n\t\t\trotation={ -0.000000 0.427556 -0.000000 0.903988 }")
+            PortLocOut.write("\n\t\t\tscale={ %g %g %g }"%(portScale,portScale,portScale))
+            PortLocOut.write("\n\t\t}\n")
 
-    PortLocOut.write("\t\t{")
-    PortLocOut.write("\n\t\t\tid=%i"%port.landID)
-    PortLocOut.write("\n\t\t\tposition={ %i 0 %i }"%(port.xyPortTupple[0],int(provMap.size[1])-int(port.xyPortTupple[1])))
-    if port.facingDirection == "South":
-        PortLocOut.write("\n\t\t\trotation={ -0.000000 -0.000000 -0.000000 1.000000 }")
-    elif port.facingDirection == "West":
-        PortLocOut.write("\n\t\t\trotation={ -0.000000 -0.672702 -0.000000 0.739914 }")
-    elif port.facingDirection == "North":
-        PortLocOut.write("\n\t\t\trotation={ -0.000000 -1.000000 -0.000000 -0.000000 }")
-    elif port.facingDirection == "East":
-        PortLocOut.write("\n\t\t\trotation={ -0.000000 0.736881 -0.000000 0.676022 }")
-    elif port.facingDirection == "SW":
-        PortLocOut.write("\n\t\t\trotation={ -0.000000 -0.874790 -0.000000 0.484502 }")
-    elif port.facingDirection == "NW":
-        PortLocOut.write("\n\t\t\trotation={ -0.000000 0.736881 -0.000000 0.676022 }")
-    elif port.facingDirection == "NE":
-        PortLocOut.write("\n\t\t\trotation={ -0.000000 0.910970 -0.000000 0.412472 }")
-    elif port.facingDirection == "SE":
-        PortLocOut.write("\n\t\t\trotation={ -0.000000 0.427556 -0.000000 0.903988 }")
-    PortLocOut.write("\n\t\t\tscale={ %g %g %g }"%(portScale,portScale,portScale))
-    PortLocOut.write("\n\t\t}\n")
-
-    PortCSVOut.write("%i;%i;%i;%i;\n"%(port.landID,port.waterID,port.xyPortTupple[0],int(provMap.size[1])-int(port.xyPortTupple[1])))
+            PortCSVOut.write("%i;%i;%i;%i;\n"%(port.landID,port.waterID,port.xyPortTupple[0],int(provMap.size[1])-int(port.xyPortTupple[1])))
 
 PortCSVOut.close()
 PortLocOut.close()
+skipList.close()
